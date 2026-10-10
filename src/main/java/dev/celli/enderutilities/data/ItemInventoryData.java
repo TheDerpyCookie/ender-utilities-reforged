@@ -34,7 +34,13 @@ public record ItemInventoryData(List<StoredModule> slots, int selected, boolean 
     public ItemStack stackInSlot(int slot) {
         for (StoredModule stored : slots) {
             if (stored.slot() == slot) {
-                return stored.stack().copy();
+                // Return the live stack, not a copy. Slots hand this straight to
+                // AbstractContainerMenu#moveItemStackTo, which merges by mutating the returned stack in
+                // place and relies on that being the actual slot contents. Handing out a copy makes the
+                // mutation land on a throwaway object while the source stack is still emptied, so items
+                // silently disappear. NeoForge's own ItemStackHandler returns the live stack for the
+                // same reason. withSlot() already stores its own copy, so this does not alias caller data.
+                return stored.stack();
             }
         }
         return ItemStack.EMPTY;

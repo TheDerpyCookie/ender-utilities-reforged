@@ -297,17 +297,36 @@ public class HandyBagMenu extends AbstractContainerMenu implements ItemGuiAction
             ItemStack stack = slot.getItem();
             result = stack.copy();
             int customEnd = bagSlots + MODULE_SLOTS;
+            // The player inventory (27 main + 9 hotbar) is added right after the module slots, but the
+            // armor/offhand/result/crafting slots are added AFTER it, so slots.size() is not the end of the
+            // player inventory. Since reverseDirection=true walks the range from the end, those trailing
+            // slots are filled first - which is why items used to end up in the 2x2 crafting grid.
+            int playerEnd = customEnd + 36;
             if (index == craftResultIndex) {
-                if (!moveItemStackTo(stack, customEnd, slots.size(), true) && !moveItemStackTo(stack, 0, bagSlots, false)) {
+                if (!moveItemStackTo(stack, customEnd, playerEnd, true) && !moveItemStackTo(stack, 0, bagSlots, false)) {
                     return ItemStack.EMPTY;
                 }
                 slot.onQuickCraft(stack, result);
             } else if (index < bagSlots) {
-                if (!moveItemStackTo(stack, customEnd, slots.size(), true)) {
+                // Moving out of the bag: at most one normal stack per click, like the original mod (which
+                // capped the transfer at the destination slot's limit) and only ever into the player inventory.
+                ItemStack before = stack.copy();
+                int want = Math.min(before.getCount(), Math.max(1, before.getMaxStackSize()));
+                ItemStack toMove = before.copyWithCount(want);
+                if (!moveItemStackTo(toMove, customEnd, playerEnd, true)) {
                     return ItemStack.EMPTY;
                 }
+                int moved = want - toMove.getCount();
+                if (moved > 0) {
+                    int remaining = before.getCount() - moved;
+                    slot.set(remaining <= 0 ? ItemStack.EMPTY : before.copyWithCount(remaining));
+                }
+                // AbstractContainerMenu#clicked keeps calling quickMoveStack as long as the return value is
+                // a non-empty stack that still matches the slot, so returning "result" here would keep
+                // moving until the slot is empty. Returning empty tells the caller to stop after one stack.
+                return ItemStack.EMPTY;
             } else if (index < customEnd) {
-                if (!moveItemStackTo(stack, customEnd, slots.size(), true)) {
+                if (!moveItemStackTo(stack, customEnd, playerEnd, true)) {
                     return ItemStack.EMPTY;
                 }
             } else if (ItemHandyBag.getEffectiveShiftMode(getBag()) == 1) {
